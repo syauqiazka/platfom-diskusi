@@ -1,0 +1,192 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = "postgresql://neondb_owner:npg_xHg49YulRZby@ep-empty-forest-bewvj4nl.c-9.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+
+
+
+
+
+
+
+model User {
+  id            String       @id @default(cuid())
+  email         String       @unique
+  username      String       @unique
+  displayName   String      
+  passwordHash  String?
+  bio           String?     
+  avatarUrl     String?
+  bannerUrl     String?
+  bannerColor   String?
+  avatarFrameId String?
+  effectId      String?
+  role          String @default("MEMBER")
+  suspendedUntil DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  memberships ClassMember[]
+  threads     Thread[]
+  comments    Comment[]
+  materials   Material[]
+  reports     Report[]     @relation("Reporter")
+}
+
+model Class {
+  id          String   @id @default(cuid())
+  name        String  
+  description String? 
+  subject     String? 
+  joinCode    String   @unique
+  coverUrl    String?
+  createdAt   DateTime @default(now())
+
+  members   ClassMember[]
+  threads   Thread[]
+  materials Material[]
+}
+
+model ClassMember {
+  id       String    @id @default(cuid())
+  userId   String
+  classId  String
+  role     String @default("STUDENT")
+  joinedAt DateTime  @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  class Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, classId])
+  @@index([classId])
+}
+
+model Category {
+  id      String   @id @default(cuid())
+  name    String   @unique
+  slug    String   @unique
+  threads Thread[]
+}
+
+model Thread {
+  id         String        @id @default(cuid())
+  title      String       
+  content    String       
+  authorId   String
+  classId    String?
+  categoryId String?
+  isPinned   Boolean       @default(false)
+  state      String   @default("OPEN")
+  status     String @default("VISIBLE")
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  class    Class?    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id])
+  comments Comment[]
+  reports  Report[]
+
+  @@index([classId, createdAt])
+  @@index([createdAt])
+}
+
+model Comment {
+  id        String        @id @default(cuid())
+  content   String       
+  authorId  String
+  threadId  String?
+  materialId String?
+  parentId  String?
+  depth     Int           @default(0)
+  status    String @default("VISIBLE")
+  editedAt  DateTime?
+  createdAt DateTime      @default(now())
+
+  author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  thread   Thread?   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  material Material? @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  parent   Comment?  @relation("CommentTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children Comment[] @relation("CommentTree")
+  reports  Report[]
+
+  @@index([threadId, createdAt])
+  @@index([materialId, createdAt])
+}
+
+model Material {
+  id          String        @id @default(cuid())
+  title       String       
+  description String?      
+  type        String
+  fileUrl     String?
+  publicId    String?
+  mimeType    String?
+  sizeBytes   Int?
+  linkUrl     String?
+  body        String?      
+  isOfficial  Boolean       @default(false)
+  authorId    String
+  classId     String?
+  status      String @default("VISIBLE")
+  createdAt   DateTime      @default(now())
+
+  author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  class    Class?    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  comments Comment[]
+  reports  Report[]
+
+  @@index([classId, createdAt])
+}
+
+model Report {
+  id         String       @id @default(cuid())
+  reporterId String
+  threadId   String?
+  commentId  String?
+  materialId String?
+  reason     String      
+  note       String?     
+  status     String @default("OPEN")
+  createdAt  DateTime     @default(now())
+
+  reporter User      @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  thread   Thread?   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  comment  Comment?  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  material Material? @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+}
+
+model ModerationLog {
+  id         String           @id @default(cuid())
+  actorId    String
+  action     String
+  targetType String          
+  targetId   String
+  classId    String?
+  reason     String          
+  createdAt  DateTime         @default(now())
+
+  @@index([targetType, targetId])
+  @@index([classId, createdAt])
+}
+
+model AvatarFrame {
+  id       String @id @default(cuid())
+  name     String
+  assetUrl String
+  type     String
+}
+
+model ProfileEffect {
+  id        String @id @default(cuid())
+  name      String
+  configKey String
+}

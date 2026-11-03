@@ -1,0 +1,74 @@
+{
+  "name": "platform-diskusi",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint --quiet",
+    "type-check": "tsc --noEmit",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/syauqiazka/platfom-diskusi.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/syauqiazka/platfom-diskusi/issues"
+  },
+  "homepage": "https://github.com/syauqiazka/platfom-diskusi#readme",
+  "dependencies": {
+    "@hookform/resolvers": "^7.0.1",
+    "@prisma/client": "^5.22.0",
+    "@tailwindcss/postcss": "^4.3.4",
+    "@upstash/redis": "^1.41.0",
+    "ably": "^2.30.0",
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^13.0.3",
+    "cloudinary": "^2.11.0",
+    "clsx": "^2.1.1",
+    "gsap": "^3.15.0",
+    "nanoid": "^6.0.2",
+    "next": "^15.5.28",
+    "next-auth": "^5.0.0-beta.32",
+    "prisma": "^5.22.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-hook-form": "^7.91.0",
+    "resend": "^6.37.0",
+    "tailwind-merge": "^3.7.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/typography": "^0.5.20",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitest/ui": "^5.1.0",
+    "autoprefixer": "^10.6.2",
+    "dotenv": "^18.0.9",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.4.4",
+    "jsdom": "^29.1.1",
+    "postcss": "^8.5.32",
+    "tailwindcss": "^4.3.4",
+    "typescript": "^6.0.3",
+    "vitest": "^5.1.0"
+  },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  }
+}

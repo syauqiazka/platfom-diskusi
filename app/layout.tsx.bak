@@ -1,0 +1,9 @@
+import type { Metadata } from 'next';
+import './globals.css';
+
+export const metadata: Metadata = {
+  title: 'Platform Diskusi dan Forum Pembelajaran',
+  description: 'Ruang diskusi untuk kelas dan global',
+};
+
+export { default } from '@/components/RootLayout';
