@@ -7,3 +7,6 @@ dev.db-journal
 dist/
 build/
 .vercel/
+
+.vercel
+.env*
