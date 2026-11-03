@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import LayoutClient from '@/components/LayoutClient';
+import { SessionProvider } from 'next-auth/react';
 
 export const metadata: Metadata = {
   title: 'Platform Diskusi dan Forum Pembelajaran',
@@ -22,7 +22,9 @@ export default function RootLayout({
         />
       </head>
       <body style={{ margin: 0, padding: 0 }}>
-        <LayoutClient>{children}</LayoutClient>
+        <SessionProvider>
+          {children}
+        </SessionProvider>
       </body>
     </html>
   );
