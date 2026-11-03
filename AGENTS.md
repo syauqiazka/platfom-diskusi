@@ -1,470 +1,515 @@
-# Platform Diskusi dan Forum Pembelajaran — Agent Guide
+# AGENTS.md: Platform Diskusi dan Forum Pembelajaran
 
-## Project Summary
+Panduan untuk agent coding. Tampilan dan nuansa ada di `DESIGN.md`. Baca keduanya sebelum mengerjakan fitur apa pun.
 
-**Platform Diskusi dan Forum Pembelajaran** adalah aplikasi diskusi multi-kelas dengan fitur diskusi global. Siswa dan guru dapat memberdiskusi per kelas, berbagi materi pembelajaran, dan berinteraksi dalam forum global yang menyatukan semua kelas.
+## 1. Ringkasan Proyek
 
-**Fitur Wajib (MVP)**
-1. Ruang diskusi per kelas — thread, balasan, komenter moderasi
-2. Diskusi global — thread yang terlihat semua kelas, dengan identifier kelas di thread (atau kosong = global)
-3. Berbagi materi belajar — upload file/link, kategori (slide, video, artikel, soal)
-4. Sistem komentar bertingkat — balasan di thread hingga 4 level deep
-5. Moderasi konten — flag, approve/reject, soft delete, resolve threads
+Platform diskusi untuk kelas. Setiap kelas punya ruang diskusi sendiri, dan ada **diskusi global** yang mempertemukan semua kelas. Pengajar dan murid bisa berdiskusi, berbagi materi belajar, berkomentar, dan dimoderasi.
 
-**Fitur Tambahan (Roadmap)**
-- Autentikasi (sign-up, sign-in, SSO optional)
-- Chat pribadi real-time
-- Profil kustom (avatar, banner, frame, animated border effects)
-- Notifikasi (browser push, email)
-- Gamifikasi (badge, leaderboard dengan real data)
-- Admin dashboard (user manage, content moderation, analytics)
+**Fitur wajib (kerjakan lebih dulu):**
+1. Ruang diskusi kelas: pengajar membuat kelas, murid bergabung lewat kode, ada thread, pengumuman, dan tab materi.
+2. Diskusi global: ruang terbuka untuk semua pengguna yang login, lintas kelas.
+3. Berbagi materi belajar: gambar, PDF, tautan, dan catatan teks, di ruang kelas maupun global.
+4. Sistem komentar: balasan bertingkat, edit dan hapus milik sendiri, mention, lampiran gambar.
+5. Moderasi konten: laporan, antrean, tindakan moderator, dan log yang tidak bisa diubah.
 
----
+**Fitur tambahan (tidak kalah penting, kerjakan setelah yang wajib stabil):**
+- Autentikasi lengkap (Google/GitHub, verifikasi email, reset password).
+- Chat pribadi real-time dengan kirim foto.
+- Profil kustom: avatar, banner, bingkai avatar, efek profil beranimasi.
+- Notifikasi, pencarian, voting, dan jawaban terbaik.
+- Gamifikasi dan buka-kunci bingkai atau efek lewat poin atau badge.
+- Dashboard admin.
 
-## Stack & Rationale
-
-| Layer | Tech | Why |
-|-------|------|-----|
-| **Frontend** | Next.js 14 (App Router) + TypeScript | Server Components reduce JS, streaming, Type-safety |
-| **Styling** | Tailwind CSS + shadcn/ui | Utility-first, accessible components, rapid dev, tokens in DESIGN.md |
-| **Animation** | GSAP 3.12+ | Smooth tweens, IntersectionObserver helpers, `prefers-reduced-motion` baked in |
-| **Backend** | Next.js Route Handlers + Server Actions | Type-safe, co-located, less boilerplate than separate API |
-| **Database** | Prisma ORM + Neon (PostgreSQL) | Type-safe queries, migrations, connection pooling, free tier generous |
-| **Auth** | Auth.js (NextAuth) v5 | Session-based + JWT token, supports OAuth + credentials, refresh token rotation |
-| **Real-time** | Ably SDK | Chat, presence, pub/sub. Managed, scalable, free tier covers MVP |
-| **Image Upload** | Cloudinary | CDN delivery, auto-crop, format negotiation, webhooks for sync |
-| **Validation** | Zod + Server-side enforcement | Client hints, server validation mandatory (never trust client) |
+Autentikasi dasar (masuk dan daftar) tetap dibutuhkan sejak awal karena fitur wajib bergantung padanya.
 
 ---
 
-## Commands
+## 2. Stack
+
+| Lapisan | Teknologi | Catatan |
+|---|---|---|
+| Framework | Next.js (App Router) + TypeScript | Pakai versi stabil terbaru. Server Components secara default. |
+| Styling | Tailwind CSS + shadcn/ui | Token dari `DESIGN.md`. |
+| Animasi | GSAP | Gunakan `useGSAP` atau `gsap.context()` dan `gsap.matchMedia()`. |
+| Database | PostgreSQL di Neon | Dua URL: pooled untuk aplikasi, direct untuk migrasi. |
+| ORM | Prisma | Hanya diakses dari sisi server. |
+| Autentikasi | Auth.js | Periksa dokumentasi versi terpasang untuk strategi sesi dan provider Credentials. |
+| Real-time | Ably | Chat dan presence. Autentikasi lewat token buatan server. |
+| Upload | Cloudinary | Upload bertanda tangan (signed upload) dari server. |
+| Validasi | Zod | Skema yang sama dipakai di client dan server. |
+| Rate limiting | Upstash Redis + Ratelimit | Penyimpanan bersama dibutuhkan karena deployment serverless. |
+| Form | React Hook Form | Dipakai bersama Zod. |
+
+Jangan menambah dependensi baru tanpa alasan yang jelas. Bila perlu, tulis alasannya di pesan commit.
+
+---
+
+## 3. Perintah
+
+Tambahkan skrip ke `package.json` bila belum ada.
 
 ```bash
-# Setup
 npm install
-npm run db:push          # Prisma migrate to Neon
-npm run db:seed          # Optional: seed test data
-
-# Development
-npm run dev              # http://localhost:3000, auto-reload
-
-# Build & Deploy
+npm run dev                      # http://localhost:3000
 npm run build
-npm start
-
-# Database
-npx prisma studio       # GUI DB browser
-npx prisma migrate dev --name <migration_name>
-
-# Linting & Type Check
 npm run lint
-npm run type-check
+npm run type-check               # tsc --noEmit
 
-# Testing (setup with Vitest + Playwright)
-npm run test            # Unit tests
-npm run test:e2e        # Integration tests
+npx prisma generate
+npx prisma migrate dev --name <nama_migrasi>   # pengembangan
+npx prisma migrate deploy                      # produksi
+npx prisma studio
+
+npm run test                     # Vitest
+npm run test:e2e                 # Playwright
+```
+
+`prisma db push` hanya untuk prototipe cepat. Untuk perubahan skema yang dipertahankan, pakai migrasi.
+
+---
+
+## 4. Struktur Folder
+
+Kelompokkan per fitur. Struktur ini adalah usulan, sesuaikan seperlunya dan catat bila berubah.
+
+```
+app/
+  (auth)/masuk, daftar
+  (app)/
+    layout.tsx                    # sidebar dan header
+    page.tsx                      # beranda: kelas saya dan aktivitas
+    kelas/[kelasId]/
+      page.tsx                    # diskusi kelas
+      materi/
+      anggota/
+      diskusi/[threadId]/
+    global/
+      page.tsx                    # diskusi global
+      materi/
+      [threadId]/
+    chat/[username]/              # tahap lanjutan
+    profil/[username]/
+    moderasi/                     # antrean laporan dan log
+    admin/                        # tahap lanjutan
+  api/
+    auth/[...nextauth]/
+    ably/token/
+    upload/sign/
+    upload/webhook/
+components/
+  ui/                             # shadcn/ui
+  thread/ komentar/ materi/ moderasi/ profil/ layout/
+lib/
+  db.ts                           # klien Prisma
+  auth.ts
+  permissions.ts                  # semua pemeriksaan hak akses di satu tempat
+  validators/                     # skema Zod per fitur
+  cloudinary.ts
+  ably.ts
+  ratelimit.ts
+server/
+  actions/                        # Server Actions per fitur
+  queries/                        # fungsi baca data
+prisma/
+  schema.prisma
+  seed.ts
+tests/
+  unit/ integration/ e2e/
+DESIGN.md
+AGENTS.md
 ```
 
 ---
 
-## Folder Structure
+## 5. Konvensi Kode
 
-```
-platform-diskusi/
-├── app/
-│   ├── (auth)/
-│   │   ├── login/page.tsx
-│   │   ├── signup/page.tsx
-│   │   └── layout.tsx
-│   ├── (dashboard)/
-│   │   ├── layout.tsx           # Sidebar + header
-│   │   ├── page.tsx             # Home / feed
-│   │   ├── kelas/[id]/
-│   │   │   ├── page.tsx         # Class discussion view
-│   │   │   └── layout.tsx
-│   │   ├── diskusi/[threadId]/  # Thread detail
-│   │   │   └── page.tsx
-│   │   ├── materi/              # Learning materials
-│   │   │   ├── page.tsx
-│   │   │   └── [id]/page.tsx
-│   │   ├── chat/[userId]/       # DM (future)
-│   │   ├── profil/[userId]/     # User profile
-│   │   └── admin/               # Moderation (if role === 'MODERATOR'|'ADMIN')
-│   │       ├── flags/page.tsx
-│   │       ├── users/page.tsx
-│   │       └── analytics/page.tsx
-│   ├── api/
-│   │   ├── auth/
-│   │   │   └── [...nextauth]/route.ts    # NextAuth API
-│   │   ├── threads/
-│   │   │   ├── route.ts                  # GET (list), POST (create)
-│   │   │   ├── [id]/route.ts             # GET, PATCH, DELETE
-│   │   │   ├── [id]/comments/route.ts    # POST comment
-│   │   │   └── [id]/resolve/route.ts     # PATCH (resolve thread)
-│   │   ├── materials/route.ts
-│   │   ├── upload/
-│   │   │   ├── route.ts                  # Presigned URL for Cloudinary
-│   │   │   └── webhook.ts                # Cloudinary webhook
-│   │   ├── ably/
-│   │   │   └── token/route.ts            # Generate Ably token
-│   │   └── admin/
-│   │       ├── flags/[id]/route.ts       # Approve/reject
-│   │       ├── users/[id]/route.ts
-│   │       └── analytics/route.ts
-│   └── layout.tsx                        # Root + providers
-├── components/
-│   ├── ui/
-│   │   ├── Button.tsx
-│   │   ├── Input.tsx
-│   │   ├── Card.tsx
-│   │   ├── Badge.tsx
-│   │   ├── Modal.tsx
-│   │   ├── Notification.tsx
-│   │   └── ...
-│   ├── layout/
-│   │   ├── Sidebar.tsx
-│   │   ├── Header.tsx
-│   │   └── Footer.tsx
-│   ├── thread/
-│   │   ├── ThreadCard.tsx
-│   │   ├── ThreadDetail.tsx
-│   │   ├── CommentList.tsx
-│   │   ├── CommentForm.tsx
-│   │   └── ModeratorPanel.tsx
-│   ├── material/
-│   │   ├── MaterialCard.tsx
-│   │   ├── MaterialUpload.tsx
-│   │   └── MaterialList.tsx
-│   ├── profile/
-│   │   ├── ProfileHeader.tsx        # Avatar + banner + effects
-│   │   ├── ProfileEditor.tsx
-│   │   └── AvatarUpload.tsx
-│   └── forms/
-│       ├── ThreadForm.tsx
-│       ├── CommentForm.tsx
-│       └── MaterialForm.tsx
-├── lib/
-│   ├── db.ts                        # Prisma client
-│   ├── auth.ts                      # Auth.js config
-│   ├── ably.ts                      # Ably client
-│   ├── cloudinary.ts                # Cloudinary helpers
-│   ├── validators.ts                # Zod schemas
-│   ├── auth-server.ts               # Server-side auth checks
-│   └── utils.ts
-├── styles/
-│   ├── globals.css                  # Tailwind + custom vars
-│   └── animations.css               # GSAP timeline helpers
-├── prisma/
-│   ├── schema.prisma                # Data model
-│   └── seed.ts                      # Test data
-├── public/
-│   └── ...
-├── tests/
-│   ├── unit/
-│   ├── integration/
-│   └── e2e/
-├── .env.example
-├── next.config.js
-├── tsconfig.json
-├── tailwind.config.js
-├── DESIGN.md                        # Design system
-├── AGENTS.md                        # This file
-└── package.json
-```
+- `strict: true`. Tanpa `any`, tanpa `@ts-ignore` kecuali dengan komentar alasannya.
+- Identifier dalam Bahasa Inggris (`camelCase` untuk variabel dan field, `PascalCase` untuk tipe dan komponen). Teks yang dilihat pengguna dan path URL dalam Bahasa Indonesia.
+- Server Actions mengembalikan hasil bertipe: `{ ok: true, data } | { ok: false, error }`.
+- Semua input divalidasi dengan Zod di server, apa pun yang sudah divalidasi di client.
+- Server Actions untuk mutasi sederhana dari antarmuka. Route Handlers untuk webhook, token, dan upload.
+- Jangan kirim objek Prisma mentah ke client. Pakai `select` dan ubah menjadi DTO. Jangan pernah mengirim `passwordHash`.
+- Client Component (`'use client'`) hanya bila perlu interaktivitas.
+- Komentar hanya menjelaskan *mengapa*, tidak mengulang apa yang kode lakukan.
+- Tangani error dengan jelas. Catat detail di server, kirim pesan yang ramah ke pengguna.
+- Kode status: 400 (validasi), 401 (belum masuk), 403 (tidak berhak), 404, 429 (terlalu banyak permintaan), 500.
 
 ---
 
-## Code Conventions
+## 6. Model Data
 
-### TypeScript Strictness
-- `strict: true` in `tsconfig.json` — no implicit any, no unsafe null
-- All Server Actions return typed result: `{ success: boolean, data?: T, error?: string }`
-- All API routes validate input with Zod before processing
-
-### Validation
-- **Client**: Zod schema for form hints, `react-hook-form` for DX
-- **Server**: Always re-validate with identical Zod schema (client can be bypassed)
-- Prisma schema enforces DB constraints (unique, required, length limits)
-
-### Server Actions vs Route Handlers
-- Use **Server Actions** for simple mutations (create thread, add comment) — shorter, no JSON serialization
-- Use **Route Handlers** for public APIs, webhooks, file uploads
-- Both validate with Zod before query execution
-
-### Database Access
-- Prisma queries **ONLY** from Server Components, Server Actions, or Route Handlers
-- Never expose raw Prisma/SQL to browser — always transform to DTO
-- Use `.select()` to limit fields returned (e.g., never return `password_hash`)
-
-### Component Organization
-- Functional components, hooks-based
-- Client Component (`'use client'`) only when needed (form interactivity, event listeners, browser API)
-- Server Component by default — stream HTML, reduce JS bundle
-
-### Error Handling
-- Try-catch all async operations, log to stderr or monitoring service
-- Return user-friendly error message to client, detailed logs server-side
-- 400 Bad Request (validation), 401 Unauthorized, 403 Forbidden, 404, 500 (log incident)
-
-### Testing
-- Unit test: utilities, validators, formatting functions
-- Integration test: auth flow, thread CRUD, moderation actions
-- E2E test: user journey (sign up → create thread → comment → resolve)
-- Minimum coverage: 70% for critical paths (auth, moderation)
-
----
-
-## Data Model Highlights
-
-(Full schema in `prisma/schema.prisma`)
+Skema di bawah adalah rancangan inti untuk fitur wajib. Skema lengkap ada di `prisma/schema.prisma`. Tabel untuk fitur tambahan (Message, Conversation, Notification, Vote, Badge) disusun saat fiturnya dikerjakan.
 
 ```prisma
+enum PlatformRole { MEMBER MODERATOR ADMIN }
+enum ClassRole    { TEACHER ASSISTANT STUDENT }
+enum ContentStatus { VISIBLE HIDDEN REMOVED }          // status moderasi
+enum ThreadState  { OPEN ANSWERED CLOSED }             // status diskusi, terpisah dari moderasi
+enum MaterialType { SLIDE VIDEO ARTICLE EXERCISE DOCUMENT IMAGE LINK NOTE }
+enum ReportStatus { OPEN DISMISSED ACTIONED }
+enum ModerationAction { DISMISS HIDE REMOVE RESTORE WARN SUSPEND }
+
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  username      String    @unique @db.VarChar(50)
-  passwordHash  String?   // nullable if OAuth
-  name          String?
-  bio           String?   @db.VarChar(250)
-  avatar_url    String?   // Cloudinary URL
-  banner_url    String?
-  classId       String?   // FK to Class (students join classes)
-  role          Role      @default(STUDENT)  // STUDENT, MODERATOR, ADMIN
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  
-  threads       Thread[]
-  comments      Comment[]
-  materials     Material[]
+  id            String       @id @default(cuid())
+  email         String       @unique
+  username      String       @unique @db.VarChar(30)
+  displayName   String       @db.VarChar(60)
+  passwordHash  String?                              // kosong bila login lewat OAuth
+  bio           String?      @db.VarChar(250)
+  avatarUrl     String?
+  bannerUrl     String?
+  bannerColor   String?                              // cadangan bila belum ada banner
+  avatarFrameId String?
+  effectId      String?
+  role          PlatformRole @default(MEMBER)
+  suspendedUntil DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  memberships ClassMember[]
+  threads     Thread[]
+  comments    Comment[]
+  materials   Material[]
+  reports     Report[]     @relation("Reporter")
+  avatarFrame AvatarFrame?   @relation(fields: [avatarFrameId], references: [id])
+  profileEffect ProfileEffect? @relation(fields: [effectId], references: [id])
 }
 
 model Class {
-  id        String   @id @default(cuid())
-  name      String   @db.VarChar(100)
-  code      String   @unique @db.VarChar(20)
-  users     User[]
+  id          String   @id @default(cuid())
+  name        String   @db.VarChar(100)
+  description String?  @db.VarChar(500)
+  subject     String?  @db.VarChar(80)
+  joinCode    String   @unique @db.VarChar(12)
+  coverUrl    String?
+  createdAt   DateTime @default(now())
+
+  members   ClassMember[]
   threads   Thread[]
   materials Material[]
 }
 
+model ClassMember {
+  id       String    @id @default(cuid())
+  userId   String
+  classId  String
+  role     ClassRole @default(STUDENT)
+  joinedAt DateTime  @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  class Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, classId])
+  @@index([classId])
+}
+
+model Category {
+  id      String   @id @default(cuid())
+  name    String   @unique @db.VarChar(60)
+  slug    String   @unique
+  threads Thread[]
+}
+
 model Thread {
-  id          String    @id @default(cuid())
-  title       String    @db.VarChar(200)
-  content     String    @db.Text
-  authorId    String
-  author      User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  classId     String?   // Null = Global
-  class       Class?    @relation(fields: [classId], references: [id])
-  isPinned    Boolean   @default(false)
-  status      ThreadStatus @default(OPEN)  // OPEN, RESOLVED, CLOSED
-  flagCount   Int       @default(0)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  comments    Comment[]
-  flags       Flag[]
+  id         String        @id @default(cuid())
+  title      String        @db.VarChar(200)
+  content    String        @db.Text
+  authorId   String
+  classId    String?                                  // kosong berarti diskusi global
+  categoryId String?                                  // dipakai di diskusi global
+  isPinned   Boolean       @default(false)
+  state      ThreadState   @default(OPEN)
+  status     ContentStatus @default(VISIBLE)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  class    Class?    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id])
+  comments Comment[]
+  reports  Report[]
+
+  @@index([classId, createdAt])
+  @@index([createdAt])
 }
 
 model Comment {
-  id        String   @id @default(cuid())
-  content   String   @db.Text
+  id        String        @id @default(cuid())
+  content   String        @db.Text
   authorId  String
-  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  threadId  String
-  thread    Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  parentId  String?  // Null = top-level; else reply to comment
-  parent    Comment? @relation("CommentTree", fields: [parentId], references: [id], onDelete: Cascade)
-  children  Comment[] @relation("CommentTree")
-  status    CommentStatus @default(APPROVED)  // APPROVED, PENDING, REJECTED
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  threadId  String?
+  materialId String?
+  parentId  String?
+  depth     Int           @default(0)                // 0 sampai 3
+  status    ContentStatus @default(VISIBLE)
+  editedAt  DateTime?
+  createdAt DateTime      @default(now())
+
+  author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  thread   Thread?   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  material Material? @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  parent   Comment?  @relation("CommentTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children Comment[] @relation("CommentTree")
+  reports  Report[]
+
+  @@index([threadId, createdAt])
+  @@index([materialId, createdAt])
 }
 
 model Material {
-  id         String   @id @default(cuid())
-  title      String   @db.VarChar(200)
-  description String? @db.VarChar(500)
-  category   String   // slide, video, artikel, soal
-  fileUrl    String?  // Cloudinary
-  link       String?  // External URL
-  authorId   String
-  author     User     @relation(fields: [authorId], references: [id])
-  classId    String?  // Null = Global
-  class      Class?   @relation(fields: [classId], references: [id])
-  createdAt  DateTime @default(now())
+  id          String        @id @default(cuid())
+  title       String        @db.VarChar(200)
+  description String?       @db.VarChar(500)
+  type        MaterialType
+  fileUrl     String?                                 // URL Cloudinary
+  publicId    String?
+  mimeType    String?
+  sizeBytes   Int?
+  linkUrl     String?
+  body        String?       @db.Text                  // untuk catatan teks
+  isOfficial  Boolean       @default(false)           // ditandai pengajar
+  authorId    String
+  classId     String?                                 // kosong berarti global
+  status      ContentStatus @default(VISIBLE)
+  createdAt   DateTime      @default(now())
+
+  author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  class    Class?    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  comments Comment[]
+  reports  Report[]
+
+  @@index([classId, createdAt])
 }
 
-model Flag {
-  id        String  @id @default(cuid())
-  reason    String  @db.VarChar(100)
-  threadId  String
-  thread    Thread  @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User    @relation(fields: [userId], references: [id])
-  status    FlagStatus @default(PENDING)  // PENDING, APPROVED, REJECTED
-  createdAt DateTime @default(now())
-  @@unique([threadId, userId])  // One flag per user per thread
+model Report {
+  id         String       @id @default(cuid())
+  reporterId String
+  threadId   String?
+  commentId  String?
+  materialId String?
+  reason     String       @db.VarChar(40)             // spam, sara, tidak_pantas, lainnya
+  note       String?      @db.VarChar(500)
+  status     ReportStatus @default(OPEN)
+  createdAt  DateTime     @default(now())
+
+  reporter User      @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  thread   Thread?   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  comment  Comment?  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  material Material? @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
 }
 
-enum Role { STUDENT MODERATOR ADMIN }
-enum ThreadStatus { OPEN RESOLVED CLOSED }
-enum CommentStatus { APPROVED PENDING REJECTED }
-enum FlagStatus { PENDING APPROVED REJECTED }
+model ModerationLog {
+  id         String           @id @default(cuid())
+  actorId    String
+  action     ModerationAction
+  targetType String           @db.VarChar(20)         // THREAD, COMMENT, MATERIAL, USER
+  targetId   String
+  classId    String?                                  // kosong bila di tingkat platform
+  reason     String           @db.VarChar(500)
+  createdAt  DateTime         @default(now())
+
+  @@index([targetType, targetId])
+  @@index([classId, createdAt])
+}
+
+model AvatarFrame {
+  id       String @id @default(cuid())
+  name     String
+  assetUrl String
+  type     String                                     // static | svg | lottie
+  users    User[]
+}
+
+model ProfileEffect {
+  id        String @id @default(cuid())
+  name      String
+  configKey String                                    // kunci komponen animasi GSAP
+  users     User[]
+}
 ```
 
-**Key Rules**
-- Thread & Material: `classId` **optional** (NULL = global, visible to all classes)
-- Comment: **Max 4 levels deep** (enforced in validation before insert)
-- User.classId: student's main class; can view materials from other classes but threads are class-scoped
-- Status enum: enforced DB-side, no raw strings
+**Aturan penting:**
+- `classId` kosong pada `Thread` dan `Material` berarti **diskusi global**. Satu kode dipakai untuk kedua ruang.
+- Peran ada dua tingkat: `PlatformRole` (MEMBER, MODERATOR, ADMIN) dan `ClassRole` (TEACHER, ASSISTANT, STUDENT) per kelas lewat `ClassMember`. Seorang pengguna bisa jadi murid di satu kelas dan asisten di kelas lain.
+- `Report` menunjuk tepat **satu** target (thread, komentar, atau materi). Prisma tidak bisa menyatakan syarat ini, jadi pastikan di validasi Zod dan tambahkan `CHECK` lewat migrasi SQL.
+- `Comment` menunjuk tepat satu dari `threadId` atau `materialId`. Pastikan dengan cara yang sama.
+- **Kedalaman komentar:** `depth` 0 sampai 3 (komentar utama ditambah 3 tingkat balasan). Server menolak balasan bila `parent.depth >= 3`. Hitung `depth` di server, jangan percaya client.
+- **Mengambil komentar:** ambil semua komentar satu thread dalam satu query, lalu susun pohonnya di memori. Hindari query berantai per tingkat.
+- **Soft delete:** konten yang dihapus moderator berstatus `REMOVED` dan tetap ada untuk jejak audit. Konten yang `HIDDEN` atau `REMOVED` tidak pernah dikirim isinya ke pengguna biasa.
+- `ThreadState` (terjawab atau ditutup) tidak sama dengan `ContentStatus` (moderasi). Jangan dicampur.
+- `ModerationLog` hanya ditulis, tidak pernah diubah atau dihapus oleh aplikasi.
 
 ---
 
-## Security Rules
+## 7. Hak Akses
 
-### Authentication & Authorization
-- Auth via Auth.js: session cookie (secure, httpOnly, sameSite=Lax)
-- Role-based access: STUDENT (read), MODERATOR (approve/reject), ADMIN (full)
-- Check `session?.user?.role` server-side before modifying threads
+Semua pemeriksaan hak akses ada di `lib/permissions.ts`. Jangan menulis ulang logikanya di tempat lain.
 
-### Input Validation & Database
-- **Server**: Always re-validate with Zod schema (client can be bypassed)
-- Content sanitization: strip HTML tags server-side; store plain text
-- Rate-limit API routes: 10 req/min per IP for posting (prevent spam)
-- Prisma parameterized queries only — never string interpolation
-- Neon: enforce SSL connections (`sslmode=require`)
-- Secrets: `DATABASE_URL`, `AUTH_SECRET`, `ABLY_API_KEY`, `CLOUDINARY_SECRET` in `.env.local` only
+| Tindakan | Siapa |
+|---|---|
+| Melihat thread dan materi kelas | Anggota kelas tersebut, moderator platform, admin |
+| Melihat diskusi global | Semua pengguna yang login |
+| Membuat thread atau materi di kelas | Anggota kelas |
+| Membuat thread atau materi global | Semua pengguna yang login |
+| Menyematkan thread, menandai materi resmi | TEACHER dan ASSISTANT kelas tersebut |
+| Memoderasi konten kelas | TEACHER dan ASSISTANT kelas tersebut, moderator platform, admin |
+| Memoderasi konten global | Moderator platform dan admin |
+| Edit atau hapus konten milik sendiri | Pemiliknya |
+| Memblokir pengguna di tingkat platform | Admin |
 
-### File Upload
-- Whitelist: JPG, PNG, WebP only (validate MIME type server-side)
-- Size cap: 10 MB per file, enforced server-side
-- Cloudinary config: private folder, transformation only
-- Webhook: verify signature with shared secret (HMAC-SHA256)
-
-### Content Moderation
-- Flag system: user can flag thread (reason: spam, inappropriate, off-topic)
-- Soft delete: content marked `status = REJECTED`, not hard-deleted (audit trail)
-- Auto-flag triggers: >2 external links, >10 mentions, explicit keyword list
+Periksa hak akses di server pada **setiap** Server Action dan Route Handler. Menyembunyikan tombol di antarmuka bukan pemeriksaan hak akses.
 
 ---
 
-## Image Upload & Cloudinary Flow
+## 8. Keamanan
 
-**Client-side**
-1. User selects file; validate size ≤ 10 MB, MIME in [image/jpeg, image/png, image/webp]
-2. Show crop UI (1:1 aspect), preview 160×160px
-3. Call `/api/upload` for presigned URL
+**Autentikasi dan sesi**
+- Cookie sesi `httpOnly`, `secure` di produksi, `sameSite=Lax`.
+- Hash password dengan argon2 atau bcrypt. Jangan pernah menyimpan atau mencatat password mentah.
+- Pengguna yang sedang diblokir (`suspendedUntil`) tidak bisa membuat konten baru.
 
-**Server-side (/api/upload)**
-1. Verify `session` is authenticated
-2. Generate presigned Cloudinary URL (server-secret only)
-3. Return URL + public_id to client
+**Input dan konten**
+- Validasi semua input dengan Zod di server.
+- Konten buatan pengguna adalah teks biasa atau Markdown terbatas. Saat ditampilkan, bersihkan dengan pustaka sanitasi (DOMPurify atau sanitize-html). Jangan pernah memakai `dangerouslySetInnerHTML` tanpa sanitasi.
+- Prisma hanya dengan query berparameter. Jangan membangun SQL dengan string.
+- Neon: koneksi SSL (`sslmode=require`).
 
-**Client Upload to Cloudinary**
-1. POST file to presigned URL (direct)
-2. Get `secure_url` from Cloudinary response
-3. Call `/api/profile` Server Action to save avatar_url to User
+**Rate limiting**
+- Pakai Upstash Ratelimit, per pengguna bila sudah masuk dan per IP bila belum. Penyimpanan di memori tidak berfungsi di serverless.
+- Batasi: membuat thread, komentar, laporan, unggahan, dan pesan chat.
 
-**Cloudinary Webhook**
-- Listen on `/api/upload/webhook`
-- Verify HMAC signature
-- Sync User.avatar_url if transform completes
+**Upload**
+- Gambar: JPG, PNG, WebP, maksimal 10 MB. Dokumen PDF: maksimal 10 MB (usulan, sesuaikan dengan batas paket Cloudinary).
+- Server membuat tanda tangan upload dan membatasi format serta ukuran lewat parameter yang ditandatangani. Setelah upload, server memverifikasi hasilnya (tipe dan ukuran) sebelum menyimpan URL ke database. Validasi di client hanya untuk umpan balik cepat.
+- Verifikasi tanda tangan notifikasi webhook Cloudinary sesuai dokumentasi resmi.
+- Simpan hanya URL dan `publicId` di database, bukan file.
 
----
+**Ably**
+- Server membuat token lewat `/api/ably/token`. Batasi kemampuan (capability) token hanya ke channel milik pengguna. Jangan pernah menaruh `ABLY_API_KEY` di client.
+- Nama channel chat pribadi: `dm:{idKecil}:{idBesar}` dengan ID diurutkan agar konsisten.
 
-## UI Building Rules
+**Rahasia**
+- `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `ABLY_API_KEY`, `CLOUDINARY_*`, `UPSTASH_*` hanya di environment variable. Sediakan `.env.example` tanpa nilai asli. Jangan commit `.env.local`.
 
-**Before Any Component**
-1. Read `DESIGN.md` for palette, spacing, type scale, specs
-2. Build in shadcn/ui when possible (Button, Input, Card, Dialog)
-3. Extend Tailwind config with DESIGN.md tokens
-4. Use CSS custom properties for theming
-
-**Component States**
-- Every interactive element: default, hover, active, focus, disabled, loading
-- Focus: outline `2px solid terracotta` with 2px offset
-- Loading: show spinner (Lucide `<Loader2 className="animate-spin" />`)
-- Error: red border + error message below input
-
-**Responsive Design**
-- Mobile-first: base styles, `@media (min-width: 640px)` for tablet+
-- Breakpoints: 640px (tablet), 1024px (desktop)
-- Touch target: ≥ 44×44px minimum
-- Tap-friendly spacing: ≥ 8px between interactive elements
-
-**Animation & Accessibility**
-- Use GSAP for complex tweens (thread entrance, modal open)
-- Use Tailwind `animate-*` for simple transitions
-- Respect `prefers-reduced-motion` via Tailwind `motion-safe:` prefix
-- Keep animations ≤ 300ms
-- Semantic HTML: `<button>`, `<label>`, `<h1–h6>`, landmarks
-- ARIA: `aria-label` for icon buttons, `aria-live="polite"` for notifications
-- Keyboard: Tab order natural, Enter/Space trigger buttons, ESC closes modals
+**Moderasi otomatis awal**
+- Tandai untuk ditinjau bila ada lebih dari 2 tautan luar atau lebih dari 10 mention dalam satu konten, atau cocok dengan daftar kata terlarang. Tandai, jangan langsung hapus.
 
 ---
 
-## Workflow & Feature Development
+## 9. Alur Upload Gambar
 
-### Anti-Slop During Development
-1. Install: `npx antislop-ai` (pick skills: antislop, antislop-ui, antislop-copywriting, antislop-human, antislop-layoutmobile)
-2. Mode: "during" — filter active as you build
-3. At completion: run Delivery Gate (`antislop --check`) before ship
+1. **Client:** pilih file, periksa tipe dan ukuran, tampilkan pratinjau. Untuk avatar (1:1) dan banner (sekitar 3:1), tampilkan editor potong sebelum unggah.
+2. **Server (`/api/upload/sign`):** pastikan pengguna sudah masuk dan belum kena batas laju, lalu buat parameter upload bertanda tangan dengan folder, format yang diizinkan, dan batas ukuran.
+3. **Client:** unggah langsung ke Cloudinary dengan parameter bertanda tangan itu, lalu terima `secure_url` dan `public_id`.
+4. **Server (Server Action):** verifikasi hasil upload, lalu simpan URL ke `User.avatarUrl`, `User.bannerUrl`, `Material.fileUrl`, atau kolom gambar lain.
+5. **Tampilan:** pakai `next/image` dengan transformasi Cloudinary (ukuran tetap dan format WebP).
 
-### Per-Feature Checklist
-- [ ] Feature scoped (one small piece, e.g., "Thread create form")
-- [ ] Data model updated in `schema.prisma`, migration created
-- [ ] Server Action or Route Handler written + Zod validation
-- [ ] Component built, states handled (loading, error, empty)
-- [ ] Mobile-responsive tested at 375px, 768px, 1920px
-- [ ] Keyboard navigation works (Tab, Enter, ESC)
-- [ ] Anti-slop Delivery Gate passed
-- [ ] Tests written (unit + integration)
-- [ ] Merge to `main`, deploy to staging
+---
 
-### Testing Strategy
+## 10. Aturan Antarmuka
+
+- Baca `DESIGN.md` sebelum membuat atau mengubah komponen. Pakai token dari dokumen itu, jangan menciptakan warna baru.
+- Bangun dari shadcn/ui bila ada komponen yang cocok, lalu sesuaikan dengan token.
+- Semua teks yang terlihat pengguna dalam Bahasa Indonesia yang natural, dengan sapaan "kamu".
+- Tangani semua state: default, hover, fokus, nonaktif, loading, kosong, error.
+- Desain mobile-first. Uji di lebar 375px, 768px, dan 1280px.
+- Dilarang menaruh data buatan di antarmuka: statistik, jumlah pengguna, testimoni, rating, atau pengguna palsu. Gunakan data nyata atau keadaan kosong yang jujur.
+- Animasi: ikuti tabel di `DESIGN.md`. Hanya `transform` dan `opacity`, dan selalu hormati `prefers-reduced-motion` lewat `gsap.matchMedia()`.
+
+---
+
+## 11. Anti-Slop
+
+Proyek ini memakai https://github.com/miqdadbadjuber/anti-slop sebagai filter terhadap UI, tulisan, dan kode yang generik.
+
+1. Pasang dengan `npx antislop-ai`. Pilih skill: antislop (inti), antislop-ui, antislop-copywriting, antislop-human, antislop-layoutmobile, antislop-code.
+2. Gunakan mode **during** (aturan berlaku saat membangun). Agar tidak ditanya tiap sesi, simpan dengan `npx antislop-ai --mode during`.
+3. Sebelum fitur dianggap selesai, jalankan **Delivery Gate**: laporan PASS/FAIL dalam empat blok yang dibuat agent sesuai instruksi skill. Ini bukan perintah CLI.
+4. Anti-slop adalah filter, bukan panduan gaya. Arah visual ada di `DESIGN.md`. Hasil yang hambar berarti `DESIGN.md` perlu diperkaya, bukan filter yang gagal.
+5. Perbarui dengan `npx antislop-ai --update`, lalu mulai sesi baru agar skill dimuat ulang.
+
+Bila agent tidak bisa menjalankan `npx`, unduh `antislop.md` dari repo dan jadikan konteks sesi.
+
+---
+
+## 12. Alur Kerja
+
+**Urutan pengerjaan yang disarankan:**
+1. Fondasi: proyek, database, autentikasi dasar, layout, token desain.
+2. Kelas: buat kelas, bergabung dengan kode, keanggotaan dan peran.
+3. Thread dan komentar di ruang kelas.
+4. Diskusi global (`classId` kosong, kategori).
+5. Berbagi materi (gambar, PDF, tautan, catatan).
+6. Moderasi: laporan, antrean, tindakan, log.
+7. Fitur tambahan: profil kustom, chat pribadi, notifikasi, gamifikasi, admin.
+
+**Per fitur:**
+- [ ] Cakupan kecil dan jelas.
+- [ ] Skema Prisma dan migrasi diperbarui.
+- [ ] Skema Zod dan pemeriksaan hak akses (`lib/permissions.ts`).
+- [ ] Server Action atau Route Handler selesai.
+- [ ] Komponen selesai dengan semua state.
+- [ ] Diuji di 375px, 768px, dan 1280px, juga dengan keyboard.
+- [ ] Delivery Gate anti-slop lolos.
+- [ ] Tes ditulis dan lolos.
+
+**Git:** satu cabang per fitur, pull request kecil, pesan commit menjelaskan alasan.
+
+**Bila ragu:** tulis asumsimu di deskripsi pull request atau bagian akhir file ini, jangan menebak diam-diam. Tanyakan bila keputusan berdampak pada model data atau hak akses.
+
+---
+
+## 13. Pengujian
+
+- **Unit (Vitest):** validator Zod, fungsi di `lib/permissions.ts`, penyusun pohon komentar, pemeriksaan kedalaman.
+- **Integrasi:** alur autentikasi, pembuatan thread dan komentar, aturan akses kelas vs global, tindakan moderasi.
+- **E2E (Playwright):** daftar, buat atau gabung kelas, buat thread, komentar, laporkan, moderator menyembunyikan konten.
+- Target cakupan: tinggi untuk jalur kritis (hak akses dan moderasi). Jangan mengejar angka cakupan untuk kode yang tidak penting.
+
+---
+
+## 14. Definisi Selesai
+
+Sebuah fitur selesai bila:
+
+1. Build dan lint bersih, TypeScript strict tanpa `any`.
+2. Tes unit dan integrasi untuk jalur kritisnya lolos.
+3. Delivery Gate anti-slop lolos, tanpa data buatan dan dengan teks yang natural.
+4. Mengikuti `DESIGN.md`: token warna, tipografi, spasi, dan responsif di 375px, 768px, 1280px.
+5. Aksesibilitas: fokus terlihat, bisa dipakai dengan keyboard, kontras memenuhi AA, HTML semantik.
+6. Keamanan: tanpa rahasia di kode, input divalidasi di server, hak akses diperiksa di server, query berparameter.
+7. Performa (target): LCP sekitar 2,5 detik atau lebih cepat dan CLS di bawah 0,1 pada halaman utama, gambar dioptimalkan.
+8. Dokumentasi: komentar menjelaskan alasan, skema Prisma terdokumentasi.
+
+---
+
+## 15. Mulai Cepat
+
 ```bash
-npm run test              # Vitest: lib/, validators, auth logic
-npm run test:e2e          # Playwright: user flow (sign up → create thread)
-```
-
----
-
-## Definition of Done (DoD)
-
-A feature is **done** when:
-
-1. ✅ **Code** — Builds without error, lints cleanly, TypeScript strict, no `any` types
-2. ✅ **Tests** — Unit tests, integration tests, coverage ≥ 70%
-3. ✅ **Anti-Slop** — Ran Delivery Gate, passed all blocks (no slop, no fake data, natural copy)
-4. ✅ **Design System** — Bahasa Indonesia text, colors from palette, spacing 8px grid, responsive (375/768/1920px)
-5. ✅ **Accessibility** — Focus visible, keyboard nav, WCAG AA contrast, semantic HTML
-6. ✅ **Security** — No secrets in code, input validated server-side, Prisma parameterized queries, auth checked
-7. ✅ **Performance** — LCP ≤ 2.5s, CLS ≤ 0.1, Server Components, images optimized
-8. ✅ **Documentation** — Code comments on "why", JSDoc for Server Actions, DB schema documented
-
----
-
-## Quick Start
-
-```bash
-# Clone + install
 git clone <repo>
-cd platform-diskusi
+cd <folder-proyek>
 npm install
 
-# Setup environment
 cp .env.example .env.local
-# Fill: DATABASE_URL, AUTH_SECRET, ABLY_API_KEY, CLOUDINARY_* keys
+# isi: DATABASE_URL (pooled), DIRECT_URL, AUTH_SECRET, ABLY_API_KEY,
+# CLOUDINARY_*, UPSTASH_*
 
-# Migrate database
-npm run db:push
-
-# Run dev server
+npx prisma migrate dev
 npm run dev
-
-# Read DESIGN.md, AGENTS.md, then start first feature
 ```
+
+Lalu baca `DESIGN.md`, pasang anti-slop, dan mulai dari langkah 1 di bagian 12.
 
 ---
 
-**Last Updated**: 2026-11-02
+## 16. Asumsi dan Catatan
 
+1. Batas 10 MB untuk PDF adalah usulan. Sesuaikan dengan batas paket Cloudinary yang dipakai.
+2. Jenis materi (SLIDE, VIDEO, ARTICLE, EXERCISE, DOCUMENT, IMAGE, LINK, NOTE) adalah usulan. Video sebaiknya berupa tautan eksternal, bukan unggahan, untuk menghemat penyimpanan.
+3. Aturan kedalaman komentar (maksimal 4 tingkat tampilan) mengikuti rancangan awal dan bisa diubah bila terasa sempit.
+4. Struktur folder bersifat usulan. Catat perubahan di sini.
+
+**Terakhir diperbarui:** 2026-11-03
